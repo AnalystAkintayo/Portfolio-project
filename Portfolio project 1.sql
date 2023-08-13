@@ -1,0 +1,172 @@
+SELECT * 
+FROM ..CovidDeaths$
+ORDER BY 3,4
+
+--SELECT *
+--FROM ..CovidVaccinations$
+--ORDER BY 3,4
+SELECT location, date, new_cases, new_deaths, total_deaths, population 
+FROM..CovidDeaths$
+ORDER BY 1,2
+
+--i want to compare the total cases the total deaths
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage 
+FROM..CovidDeaths$
+WHERE location like 'United kingdom'
+ORDER BY 1,2;
+-- This show the likehood of someone dying from covid in the UK
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage 
+FROM..CovidDeaths$
+WHERE location like '%states%'
+ORDER BY 1,2;
+
+--Show what percentage of the poluation contracted covid 
+
+SELECT location, date, total_cases,population, (total_cases/population)*100 as  PercentPopulationInfected 
+FROM..CovidDeaths$
+WHERE location like 'United kingdom'
+ORDER BY 1,2;
+
+--comparing conutries with the highest infection rate realtive to poulation
+SELECT Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+FROM..CovidDeaths$
+GROUP BY Location, Population
+ORDER BY PercentPopulationInfected desc
+-- This show that Andorra suffered with covid the most
+
+SELECT Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+FROM..CovidDeaths$
+GROUP BY Location, Population
+ORDER BY PercentPopulationInfected asc
+
+SELECT location, date, total_cases,population, (total_cases/population)*100 as  PercentPopulationInfected 
+FROM..CovidDeaths$
+WHERE location like 'Falkland Islands'
+ORDER BY 1,2;
+
+--The date show that the falkland islands dealt with covid the best howeve rin closer inpection we can see that the Falkland islands didnt have any cases reporteded, this could be that they just didnt get covid or  they failed to report the data 
+--so i need to run a query that eclued counties with no covid cases so we can find out with country was most effective in reducing the spread 
+
+SELECT Location, Population, MAX(total_cases) as HighestInfectionCount,  Max((total_cases/population))*100 as PercentPopulationInfected
+FROM..CovidDeaths$
+WHERE total_cases is not null
+GROUP BY Location, Population
+ORDER BY PercentPopulationInfected asc
+
+--The data now shows that Tanzaniza was the best
+--We can also do the saem thing with deaths
+
+
+SELECT Location, MAX(Total_deaths) as TotalDeathCount
+FROM..CovidDeaths$
+GROUP BY Location 
+ORDER BY TotalDeathCount desc
+
+SELECT Location, MAX(CAST(Total_deaths as int)) as TotalDeathCount
+FROM..CovidDeaths$
+GROUP BY Location 
+ORDER BY TotalDeathCount desc
+
+SELECT Location, MAX(CAST(Total_deaths as int)) as TotalDeathCount
+FROM..CovidDeaths$
+WHERE continent is not null 
+GROUP BY Location 
+ORDER BY TotalDeathCount desc
+
+--We can break the numbers down by contient 
+ 
+SELECT Location, MAX(CAST(Total_deaths as int)) as TotalDeathCount
+FROM..CovidDeaths$
+WHERE continent is null 
+GROUP BY Location 
+ORDER BY TotalDeathCount desc
+
+SELECT Location,population, MAX(CAST(Total_deaths as int)) as TotalDeathCount
+FROM..CovidDeaths$
+WHERE continent is null 
+GROUP BY Location, population
+ORDER BY TotalDeathCount desc
+
+SELECT location, MAX(cast(Total_deaths as int)) as TotalDeathCount
+FROM..CovidDeaths$
+--Where location like '%states%'
+Where continent is null 
+GROUP BY continent, location
+ORDER BY TotalDeathCount desc
+
+-- GLOBAL NUMBERS
+
+SELECT SUM(new_cases) as total_cases, SUM(cast(new_deaths as int)) as total_deaths, SUM(cast(new_deaths as int))/SUM(New_Cases)*100 as DeathPercentage
+FROM..CovidDeaths$
+WHERE continent is not null 
+--Group By date
+ORDER BY 1,2
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM..CovidDeaths$ dea
+Join..CovidVaccinations$ vac
+	ON dea.location = vac.location
+	and dea.date = vac.date
+WHERE dea.continent is not null 
+ORDER BY 2,3
+
+-- Using CTE to perform Calculation on Partition By in previous query
+
+With PopvsVac (Continent, Location, Date, Population, New_Vaccinations, RollingPeopleVaccinated)
+as
+(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM ..CovidDeaths$ dea
+Join ..CovidVaccinations$ vac
+	ON dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+--order by 2,3
+)
+SELECT *, (RollingPeopleVaccinated/Population)*100
+FROM PopvsVac
+
+-- Using Temp Table to perform Calculation on Partition By in previous query
+
+DROP Table if exists #PercentPopulationVaccinated
+CREATE Table #PercentPopulationVaccinated
+(
+Continent nvarchar(255),
+Location nvarchar(255),
+Date datetime,
+Population numeric,
+New_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+INSERT INTO #PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM ..CovidDeaths$ dea
+Join ..CovidVaccinations$ vac
+	ON dea.location = vac.location
+	and dea.date = vac.date
+--where dea.continent is not null 
+--order by 2,3
+SELECT *, (RollingPeopleVaccinated/Population)*100
+FROM #PercentPopulationVaccinated
+
+
+CREATE VIEW PercentPopulationVaccinated as
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM ..CovidDeaths$ dea
+Join ..CovidVaccinations$ vac
+	ON dea.location = vac.location
+	and dea.date = vac.date
+where dea.continent is not null 
+--order by 2,3
+
+
